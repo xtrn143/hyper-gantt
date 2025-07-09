@@ -1,0 +1,8 @@
+[package]
+name = "hyper-gantt-native"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hyper-gantt-core = { path = "../core" }
+bevy = { version = "0.15" }
