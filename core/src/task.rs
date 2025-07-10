@@ -5,13 +5,13 @@
 use super::timeline::Timeline;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-/// 任务ID类型
-pub type TaskId = u64;
+use crate::ecs::components::path::Path;
+use bevy::prelude::*;
 
 /// 任务数据结构
-#[derive(Debug, Clone, bevy::prelude::Component)]
+#[derive(Debug, Clone, Component)]
 pub struct Task {
-    pub id: TaskId,
+    pub id: Entity,
     pub name: String,
     pub start: chrono::DateTime<chrono::Utc>,
     pub end: chrono::DateTime<chrono::Utc>,
@@ -29,15 +29,27 @@ pub struct Rect {
     pub height: f32,
 }
 
-/// 路径点定义
+/// 任务路径定义
 #[derive(Debug, Clone)]
-pub struct Path {
+pub struct TaskPath {
     pub points: Vec<(f32, f32)>,
     pub arrow_head: Option<(f32, f32)>,
 }
 
+impl Into<crate::ecs::components::path::Path> for TaskPath {
+    fn into(self) -> crate::ecs::components::path::Path {
+        crate::ecs::components::path::Path {
+            points: self.points,
+            arrow_head: self.arrow_head,
+        }
+    }
+}
+
+/// 任务ID类型
+pub type TaskId = Entity;
+
 /// 任务布局trait
-pub trait TaskLayout {
+pub trait TaskLayout: Send + Sync + 'static {
     /// 计算任务条的布局矩形
     ///
     /// # 参数
@@ -58,7 +70,7 @@ pub trait TaskLayout {
     ///
     /// # 返回
     /// 连接路径定义
-    fn layout_dependency(&self, from: &Task, to: &Task, timeline: &dyn Timeline) -> Path;
+    fn layout_dependency(&self, from: &Task, to: &Task, timeline: &dyn Timeline) -> TaskPath;
 
     /// 计算关键路径
     ///
@@ -69,6 +81,9 @@ pub trait TaskLayout {
     /// 关键路径上的任务ID列表
     fn calculate_critical_path(&self, tasks: &[Task]) -> Vec<TaskId>;
 }
+
+#[derive(Resource)]
+pub struct TaskLayoutResource(pub Box<dyn TaskLayout>);
 
 /// 基础任务布局实现
 pub struct BasicTaskLayout {
@@ -99,9 +114,9 @@ impl TaskLayout for BasicTaskLayout {
         }
     }
 
-    fn layout_dependency(&self, from: &Task, to: &Task, timeline: &dyn Timeline) -> Path {
+    fn layout_dependency(&self, from: &Task, to: &Task, timeline: &dyn Timeline) -> TaskPath {
         // 待实现具体算法
-        Path {
+        TaskPath {
             points: vec![],
             arrow_head: None,
         }

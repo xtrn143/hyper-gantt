@@ -1,106 +1,145 @@
-//! 测试数据生成工具
-//!
-//! 提供大规模测试数据生成功能，用于性能测试和功能验证
+//! 测试工具和数据集
 
-use super::{holiday::HolidayCalendar, task::Task};
-use chrono::{Datelike, Duration, NaiveDate, Utc};
-use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
-use std::collections::{HashMap, HashSet};
+use crate::{
+    ecs::components::timeline::TimelineMarker,
+    task::{Task, TaskId},
+};
+use bevy::prelude::*;
+use chrono::{DateTime, TimeZone, Utc};
+use std::collections::HashSet;
 
-/// 生成测试数据集
-pub fn generate_test_data() -> (Vec<Task>, HolidayCalendar) {
-    let mut rng = StdRng::seed_from_u64(42); // 固定种子保证可重复性
-    let task_count = 10_000;
-    let max_depth = 5;
-    let start_date = Utc::now().date_naive();
-    let end_date = start_date + Duration::days(365);
+/// 极端测试数据集
+#[derive(Resource)]
+pub struct ExtremeTestData {
+    pub tasks: Vec<Task>,
+    pub holidays: HashSet<DateTime<Utc>>,
+    pub expected_critical_path: Vec<TaskId>,
+}
 
-    // 1. 生成中国节假日日历
-    let mut calendar = generate_chinese_holiday_calendar(Utc::now().year());
+impl ExtremeTestData {
+    pub fn new() -> Self {
+        // 定义节假日 (2025年国庆节)
+        let mut holidays = HashSet::new();
+        holidays.insert(Utc.with_ymd_and_hms(2025, 10, 1, 0, 0, 0).unwrap());
 
-    // 2. 生成任务数据
-    let mut tasks = Vec::with_capacity(task_count);
-    let mut id_counter = 0;
-    let mut parent_stack = vec![(0, None)]; // (depth, parent_id)
+        // 创建测试任务
+        let mut tasks = Vec::new();
 
-    while !parent_stack.is_empty() && tasks.len() < task_count {
-        let (depth, parent) = parent_stack.pop().unwrap();
-        id_counter += 1;
-
-        // 随机生成任务时间
-        let duration_days = rng.gen_range(1..30);
-        let start_offset = rng.gen_range(0..365 - duration_days);
-        let start = start_date + Duration::days(start_offset);
-        let end = start + Duration::days(duration_days);
-
-        // 创建任务
-        let task = Task {
-            id: id_counter,
-            name: format!("Task {}", id_counter),
-            start: start.and_hms_opt(9, 0, 0).unwrap().and_utc(),
-            end: end.and_hms_opt(18, 0, 0).unwrap().and_utc(),
-            progress: rng.gen_range(0.0..1.0),
+        // 1. 跨年任务 (2025-12-20 至 2026-01-10)
+        tasks.push(Task {
+            id: Entity::from_raw(0),
+            name: "跨年项目".to_string(),
+            start: Utc.with_ymd_and_hms(2025, 12, 20, 0, 0, 0).unwrap(),
+            end: Utc.with_ymd_and_hms(2026, 1, 10, 0, 0, 0).unwrap(),
+            progress: 0.3,
             dependencies: HashSet::new(),
-            parent,
-        };
+            parent: None,
+        });
 
-        // 随机添加子任务
-        if depth < max_depth && rng.gen_bool(0.3) {
-            let child_count = rng.gen_range(1..4);
-            for _ in 0..child_count {
-                parent_stack.push((depth + 1, Some(task.id)));
-            }
+        // 2. 零时长任务 (开始=结束)
+        tasks.push(Task {
+            id: Entity::from_raw(1),
+            name: "里程碑".to_string(),
+            start: Utc.with_ymd_and_hms(2025, 7, 15, 0, 0, 0).unwrap(),
+            end: Utc.with_ymd_and_hms(2025, 7, 15, 0, 0, 0).unwrap(),
+            progress: 1.0,
+            dependencies: HashSet::new(),
+            parent: None,
+        });
+
+        // 3. 超长任务 (6个月)
+        tasks.push(Task {
+            id: Entity::from_raw(2),
+            name: "长期项目".to_string(),
+            start: Utc.with_ymd_and_hms(2025, 7, 1, 0, 0, 0).unwrap(),
+            end: Utc.with_ymd_and_hms(2025, 12, 31, 0, 0, 0).unwrap(),
+            progress: 0.1,
+            dependencies: HashSet::new(),
+            parent: None,
+        });
+
+        // 4. 重叠任务集 (3个任务)
+        let mut overlapping_tasks = vec![
+            Task {
+                id: Entity::from_raw(3),
+                name: "重叠任务A".to_string(),
+                start: Utc.with_ymd_and_hms(2025, 8, 1, 0, 0, 0).unwrap(),
+                end: Utc.with_ymd_and_hms(2025, 8, 15, 0, 0, 0).unwrap(),
+                progress: 0.5,
+                dependencies: HashSet::new(),
+                parent: None,
+            },
+            Task {
+                id: Entity::from_raw(4),
+                name: "重叠任务B".to_string(),
+                start: Utc.with_ymd_and_hms(2025, 8, 1, 0, 0, 0).unwrap(),
+                end: Utc.with_ymd_and_hms(2025, 8, 20, 0, 0, 0).unwrap(),
+                progress: 0.3,
+                dependencies: HashSet::new(),
+                parent: None,
+            },
+            Task {
+                id: Entity::from_raw(5),
+                name: "重叠任务C".to_string(),
+                start: Utc.with_ymd_and_hms(2025, 8, 10, 0, 0, 0).unwrap(),
+                end: Utc.with_ymd_and_hms(2025, 8, 25, 0, 0, 0).unwrap(),
+                progress: 0.0,
+                dependencies: HashSet::new(),
+                parent: None,
+            },
+        ];
+        tasks.extend(overlapping_tasks);
+
+        // 5. 复杂依赖链 (环形依赖)
+        let mut dependent_tasks = vec![
+            Task {
+                id: Entity::from_raw(6),
+                name: "依赖任务A".to_string(),
+                start: Utc.with_ymd_and_hms(2025, 9, 1, 0, 0, 0).unwrap(),
+                end: Utc.with_ymd_and_hms(2025, 9, 10, 0, 0, 0).unwrap(),
+                progress: 0.0,
+                dependencies: HashSet::new(),
+                parent: None,
+            },
+            Task {
+                id: Entity::from_raw(7),
+                name: "依赖任务B".to_string(),
+                start: Utc.with_ymd_and_hms(2025, 9, 5, 0, 0, 0).unwrap(),
+                end: Utc.with_ymd_and_hms(2025, 9, 15, 0, 0, 0).unwrap(),
+                progress: 0.0,
+                dependencies: HashSet::new(),
+                parent: None,
+            },
+            Task {
+                id: Entity::from_raw(8),
+                name: "依赖任务C".to_string(),
+                start: Utc.with_ymd_and_hms(2025, 9, 10, 0, 0, 0).unwrap(),
+                end: Utc.with_ymd_and_hms(2025, 9, 20, 0, 0, 0).unwrap(),
+                progress: 0.0,
+                dependencies: HashSet::new(),
+                parent: None,
+            },
+        ];
+
+        // 设置环形依赖
+        dependent_tasks[0].dependencies.insert(Entity::from_raw(7)); // A依赖B
+        dependent_tasks[1].dependencies.insert(Entity::from_raw(8)); // B依赖C
+        dependent_tasks[2].dependencies.insert(Entity::from_raw(6)); // C依赖A
+        tasks.extend(dependent_tasks);
+
+        Self {
+            tasks,
+            holidays,
+            expected_critical_path: vec![], // 环形依赖无关键路径
         }
-
-        tasks.push(task);
     }
-
-    // 3. 添加随机依赖关系（确保无循环）
-    for i in 0..tasks.len() {
-        if rng.gen_bool(0.2) {
-            // 20%的任务有依赖
-            let dep_count = rng.gen_range(1..3);
-            for _ in 0..dep_count {
-                let dep_index = rng.gen_range(0..i); // 只依赖前面的任务
-                tasks[i].dependencies.insert(tasks[dep_index].id);
-            }
-        }
-    }
-
-    (tasks, calendar)
 }
 
-/// 生成中国节假日日历
-fn generate_chinese_holiday_calendar(year: i32) -> HolidayCalendar {
-    let mut calendar = HolidayCalendar::new();
-
-    // 添加固定节假日（示例）
-    let holidays = vec![
-        NaiveDate::from_ymd_opt(year, 1, 1).unwrap(),  // 元旦
-        NaiveDate::from_ymd_opt(year, 2, 10).unwrap(), // 春节
-        NaiveDate::from_ymd_opt(year, 5, 1).unwrap(),  // 劳动节
-        NaiveDate::from_ymd_opt(year, 10, 1).unwrap(), // 国庆节
-    ];
-
-    calendar.import_holidays(holidays);
-    calendar
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_data_generation() {
-        let (tasks, _) = generate_test_data();
-        assert_eq!(tasks.len(), 10_000);
-
-        // 检查依赖无循环
-        for task in tasks {
-            for dep in task.dependencies {
-                assert!(dep < task.id, "依赖关系存在循环");
-            }
-        }
+/// 创建测试用的时间轴配置
+pub fn test_timeline() -> TimelineMarker {
+    TimelineMarker {
+        pixels_per_day: 10.0,
+        current_scale: 1.0,
+        target_scale: None,
     }
 }

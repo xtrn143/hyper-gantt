@@ -8,6 +8,9 @@ pub mod task;
 pub mod test_utils;
 pub mod timeline;
 
+pub use ecs::components::timeline::TimelineMarker;
+pub use test_utils::ExtremeTestData;
+
 use bevy::prelude::*;
 use ecs::{dependency_layout_system, task_layout_system};
 

@@ -1,0 +1,12 @@
+[build]
+target = "D:/rust/hyper-gantt/web/index.html"
+release = false
+dist = "dist"
+index = "index.html"
+
+[serve]
+watch = ["src", "assets"]
+port = 8080
+
+[dependencies.bevy]
+features = ["webgl2"]
